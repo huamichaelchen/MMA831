@@ -1,5 +1,5 @@
 install.packages('pacman')
-pacman::p_load('cluster', 'mclust', 'e1071', 'fpc', 'dplyr', 'readxl', 'sqldf', 'tidyr', 'purrr')
+pacman::p_load('cluster', 'mclust', 'e1071', 'fpc', 'dplyr', 'readxl', 'sqldf', 'tidyr', 'purrr', 'ggplot2')
 
 # a simple function to report means by group
 seg.summ <- function(data, groups) {
@@ -37,10 +37,10 @@ loblaw_raw_data_attributes <- sqldf("select ActivePerson, InActivePerson, Physic
 loblaw_raw_data_attributes$HighestDegree <- ifelse(loblaw_raw_data_attributes$HighestDegree == 2, 1, 2)
 
 # student = 1, non-student = 2
-loblaw_raw_data_attributes$occupationCategory <- ifelse(loblaw_raw_data_attributes$occupationCategory == 5, 1, 2)
+loblaw_raw_data_attributes$Occupation <- ifelse(loblaw_raw_data_attributes$Occupation == 5, 1, 2)
 
 # couple = 1, single = 2
-loblaw_raw_data_attributes$maritalStatus <- ifelse(loblaw_raw_data_attributes$maritalStatus %in% c(1,2), 1, 2)
+loblaw_raw_data_attributes$MaritalStatus <- ifelse(loblaw_raw_data_attributes$MaritalStatus %in% c(1,2), 1, 2)
 
 ### attempted clustering part, does not make much sense to me, probably doing something wrong here ###
 wss <- (nrow(loblaw_raw_data_attributes) - 1) * sum(apply(loblaw_raw_data_attributes, 2, var))
@@ -54,4 +54,35 @@ loblaw_raw_data_attributes_kmeans <- kmeans(loblaw_raw_data_attributes, centers 
 seg.summ(loblaw_raw_data_attributes, loblaw_raw_data_attributes_kmeans$cluster)
 
 clusplot(loblaw_raw_data_attributes, loblaw_raw_data_attributes_kmeans$cluster, color = T, shade = T, labels = 9, lines = 0, main = "K-means cluster plot")
+
+
+#----------- A different way to run k-means & Sihouette Analysis -------
+tot_withinss <- map_dbl(1:10, function(k){
+  model <- kmeans(loblaw_raw_data_attributes, centers = k)
+  model$tot.withinss
+})
+
+elbow_df <- data.frame(
+  k = 1:10,
+  tot_withinss = tot_withinss
+)
+
+ggplot(elbow_df, aes(x = k, y = tot_withinss)) + geom_line() + scale_x_continuous(breaks = 1:10)
+
+sil_width <- map_dbl(2:10, function(k){
+  model <- pam(x = loblaw_raw_data_attributes, k = k)
+  model$silinfo$avg.width
+})
+
+sil_df <- data.frame(
+  k = 2:10, 
+  sil_width = sil_width
+)
+
+ggplot(sil_df, aes(x = k, y = sil_width)) + geom_line() + scale_x_continuous(breaks = 2:10)
+
+# it seems k = 2 is the best
+loblaw_raw_data_attributes_model <- kmeans(loblaw_raw_data_attributes, centers = 2)
+
+clusplot(loblaw_raw_data_attributes, loblaw_raw_data_attributes_model$cluster, color = T, shade = T, labels = 2, lines = 0, main = "K-means cluser plot")
 
