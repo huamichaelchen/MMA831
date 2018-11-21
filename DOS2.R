@@ -43,22 +43,40 @@ loblaw_raw_data_attributes$Occupation <- ifelse(loblaw_raw_data_attributes$Occup
 loblaw_raw_data_attributes$MaritalStatus <- ifelse(loblaw_raw_data_attributes$MaritalStatus %in% c(1,2), 1, 2)
 
 ### attempted clustering part, does not make much sense to me, probably doing something wrong here ###
-wss <- (nrow(loblaw_raw_data_attributes) - 1) * sum(apply(loblaw_raw_data_attributes, 2, var))
-for (i in 2:15) wss[i] <- sum(kmeans(loblaw_raw_data_attributes, centers = i)$withinss)
-plot(1:15, wss, type = "b", xlab = "Number of Clusters", ylab = "within groups sum of squares")
+#wss <- (nrow(loblaw_raw_data_attributes) - 1) * sum(apply(loblaw_raw_data_attributes, 2, var))
+#for (i in 2:15) wss[i] <- sum(kmeans(loblaw_raw_data_attributes, centers = i)$withinss)
+#plot(1:15, wss, type = "b", xlab = "Number of Clusters", ylab = "within groups sum of squares")
 
-set.seed(20190510)
-loblaw_raw_data_attributes_kmeans <- kmeans(loblaw_raw_data_attributes, centers = 9)
+#set.seed(20190510)
+#loblaw_raw_data_attributes_kmeans <- kmeans(loblaw_raw_data_attributes, centers = 9)
 
 # inspect it
-seg.summ(loblaw_raw_data_attributes, loblaw_raw_data_attributes_kmeans$cluster)
-
-clusplot(loblaw_raw_data_attributes, loblaw_raw_data_attributes_kmeans$cluster, color = T, shade = T, labels = 9, lines = 0, main = "K-means cluster plot")
+#seg.summ(loblaw_raw_data_attributes, loblaw_raw_data_attributes_kmeans$cluster)
+#clusplot(loblaw_raw_data_attributes, loblaw_raw_data_attributes_kmeans$cluster, color = T, shade = T, labels = 9, lines = 0, main = "K-means cluster plot")
 
 
 #----------- A different way to run k-means & Sihouette Analysis -------
+
+#---- Try Justin's features ----
+loblaw_raw_data_base$StoreValue <- (loblaw_raw_data_base$LowPrices + 
+                                            loblaw_raw_data_base$Freshness + 
+                                            loblaw_raw_data_base$ChoiceVariety + 
+                                            loblaw_raw_data_base$StoreLocation + 
+                                            loblaw_raw_data_base$ProductQuality + 
+                                            loblaw_raw_data_base$ReturnPolicy) / 6
+
+loblaw_raw_data_base$StoreComfort <- (loblaw_raw_data_base$ServiceQuality + 
+                                        loblaw_raw_data_base$Cleanliness + 
+                                        loblaw_raw_data_base$Busyness + 
+                                        loblaw_raw_data_base$ConvenientStoreLayout) / 4
+
+loblaw_raw_data_base$StoreHealth <- (loblaw_raw_data_base$Healthiness + 
+                                       loblaw_raw_data_base$OrganicAlternatives) / 2
+
+model_ready_df <- subset(loblaw_raw_data_base, select = c(StoreValue, StoreComfort, StoreHealth))
+
 tot_withinss <- map_dbl(1:10, function(k){
-  model <- kmeans(loblaw_raw_data_attributes, centers = k)
+  model <- kmeans(model_ready_df, centers = k)
   model$tot.withinss
 })
 
@@ -70,7 +88,7 @@ elbow_df <- data.frame(
 ggplot(elbow_df, aes(x = k, y = tot_withinss)) + geom_line() + scale_x_continuous(breaks = 1:10)
 
 sil_width <- map_dbl(2:10, function(k){
-  model <- pam(x = loblaw_raw_data_attributes, k = k)
+  model <- pam(x = model_ready_df, k = k)
   model$silinfo$avg.width
 })
 
@@ -82,7 +100,7 @@ sil_df <- data.frame(
 ggplot(sil_df, aes(x = k, y = sil_width)) + geom_line() + scale_x_continuous(breaks = 2:10)
 
 # it seems k = 2 is the best
-loblaw_raw_data_attributes_model <- kmeans(loblaw_raw_data_attributes, centers = 2)
+loblaw_raw_data_attributes_model <- kmeans(model_ready_df, centers = 2)
 
-clusplot(loblaw_raw_data_attributes, loblaw_raw_data_attributes_model$cluster, color = T, shade = T, labels = 2, lines = 0, main = "K-means cluser plot")
+clusplot(model_ready_df, loblaw_raw_data_attributes_model$cluster, color = T, shade = T, labels = 2, lines = 0, main = "K-means cluser plot")
 
