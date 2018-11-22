@@ -1,34 +1,81 @@
-install.packages('pacman')
-pacman::p_load('cluster', 'mclust', 'e1071', 'fpc', 'dplyr', 'readxl', 'sqldf', 'tidyr', 'purrr', 'ggplot2')
+---
+title: "DOS2"
+author: "SSPS"
+date: '2018-11-22'
+runtime: shiny
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  word_document:
+    fig_caption: yes
+    toc: yes
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+editor_options:
+  chunk_output_type: console
 
+---
+
+# Package Management
+```{r}
+#install.packages('pacman')
+pacman::p_load('cluster', 'mclust', 'e1071', 'fpc', 'dplyr', 'readxl', 'sqldf', 'tidyr', 'purrr', 'ggplot2', 'shiny')
+```
+
+# Loading Helper Functions
+```{r}
 # a simple function to report means by group
 seg.summ <- function(data, groups) {
   aggregate(data, list(groups), function(x) mean(as.numeric(x)))  
 }
+```
 
+# Loading data & Checking Structures
+```{r results='hold'}
 loblaw_raw_data <- readxl::read_excel('./Grocery Segmentation Raw.xlsx', sheet = 'Loblaw_Data_Collection')
 str(loblaw_raw_data)
 summary(loblaw_raw_data)
-sum(is.na(loblaw_raw_data))
+```
 
-# Let's change those ugly column names...
+# Check NAs
+```{r}
+sum(is.na(loblaw_raw_data))
+```
+
+# Change Column names
+```{r}
 names(loblaw_raw_data)[7:36] <- c("GrocerySurvey", "LowPrices", "Freshness", "ChoiceVariety", "Healthiness", "OrganicAlternatives", 
                                   "ConvenientStoreLayout", "StoreLocation", "ProductQuality", "ServiceQuality", "ReturnPolicy", 
                                   "Cleanliness", "Busyness", "ActivePerson", "InActivePerson", "PhysicallyFit", "EatHealthy", 
                                   "HealthyPerson", "EatPoorly", "ProportionFoodThatAreFruitsAndVegetables", "HoursOfExerciseLastWeek", 
                                   "NeighbourhoodClass", "Gender", "Age", "FamilySize", "MaritalStatus", "Occupation", 
                                   "OccupationDescription", "HighestDegree", "HouseholdAnnualIncome")
+```
 
-
+## Select useful columns & Check NAs again
+```{r}
 # Just in case, data.frame got messed up somewhere downstream, there is a easier way to get restarted. 
 loblaw_raw_data_1 <- sqldf("select LowPrices, Freshness, ChoiceVariety, Healthiness, OrganicAlternatives, ConvenientStoreLayout, StoreLocation, ProductQuality, ServiceQuality, ReturnPolicy, Cleanliness, Busyness, 
                       ActivePerson, InActivePerson, PhysicallyFit, EatHealthy, HealthyPerson, EatPoorly, ProportionFoodThatAreFruitsAndVegetables, HoursOfExerciseLastWeek, NeighbourhoodClass, MaritalStatus, Gender, Age, FamilySize, Occupation, HighestDegree, HouseholdAnnualIncome from loblaw_raw_data")
 summary(loblaw_raw_data_1)
 sum(is.na(loblaw_raw_data_1)) # No NAs, and these are the variables we think that worth further exploration
+```
 
+# Split data to base and descriptors
+```{r}
 loblaw_raw_data_base <- sqldf("select LowPrices, Freshness, ChoiceVariety, Healthiness, OrganicAlternatives, ConvenientStoreLayout, StoreLocation, ProductQuality, ServiceQuality, ReturnPolicy, Cleanliness, Busyness from loblaw_raw_data")
-loblaw_raw_data_descriptors <- sqldf("select ActivePerson, InActivePerson, PhysicallyFit, EatHealthy, HealthyPerson, EatPoorly, ProportionFoodThatAreFruitsAndVegetables, HoursOfExerciseLastWeek, NeighbourhoodClass, MaritalStatus, Gender, Age, FamilySize, Occupation, HighestDegree, HouseholdAnnualIncome from loblaw_raw_data")
 
+loblaw_raw_data_descriptors <- sqldf("select ActivePerson, InActivePerson, PhysicallyFit, EatHealthy, HealthyPerson, EatPoorly, ProportionFoodThatAreFruitsAndVegetables, HoursOfExerciseLastWeek, NeighbourhoodClass, MaritalStatus, Gender, Age, FamilySize, Occupation, HighestDegree, HouseholdAnnualIncome from loblaw_raw_data")
+```
+
+## Clean the data in descriptors a little bit
+```{r}
 ### The reasoning for the level compression is two fold ###
 # 1. Avoid 0 in the level transformation to keep consistent with all the other categorical variables (they all start with 1)
 # 2. Only use numbers here rather than factors because we trying to do k-mean clustering
@@ -41,10 +88,10 @@ loblaw_raw_data_descriptors$Occupation <- ifelse(loblaw_raw_data_descriptors$Occ
 
 # couple = 1, single = 2
 loblaw_raw_data_descriptors$MaritalStatus <- ifelse(loblaw_raw_data_descriptors$MaritalStatus %in% c(1,2), 1, 2)
+```
 
-#----------- A different way to run k-means & Sihouette Analysis -------
-
-#---- Try Justin's features ----
+# Feature Engineering
+```{r}
 loblaw_raw_data_base$StoreValue <- (loblaw_raw_data_base$LowPrices + 
                                             loblaw_raw_data_base$Freshness + 
                                             loblaw_raw_data_base$ChoiceVariety + 
@@ -59,7 +106,10 @@ loblaw_raw_data_base$StoreComfort <- (loblaw_raw_data_base$ServiceQuality +
 
 loblaw_raw_data_base$StoreHealth <- (loblaw_raw_data_base$Healthiness + 
                                        loblaw_raw_data_base$OrganicAlternatives) / 2
+```
 
+# Finding the K in k-means clustering & Sihouette Analysis
+```{r}
 model_ready_df <- subset(loblaw_raw_data_base, select = c(StoreValue, StoreComfort, StoreHealth))
 
 tot_withinss <- map_dbl(1:10, function(k){
@@ -86,10 +136,45 @@ sil_df <- data.frame(
 
 ggplot(sil_df, aes(x = k, y = sil_width)) + geom_line() + scale_x_continuous(breaks = 2:10)
 
-# it seems k = 2 is the best according to Sihouette Analysis
-loblaw_raw_data_base_model <- kmeans(model_ready_df, centers = 2)
+```
 
-# inspect it 
+# What is Sihouette Analysis
+> within cluster distance: C(i), closest neighbor distance: N(i)
+> S(i) = 1 - C(i)/N(i), if C(i) < N(i)
+       = 0,             if C(i) = N(i)
+       = N(i)/C(i) - 1, if C(i) > N(i)
+> 1: well matched to cluster
+> 0: On border between two clusters
+> -1: better fit in neighboring cluster
+
+## It seems k = 2 is the best according to Sihouette Analysis, and run k-means using k = 2
+```{r}
+loblaw_raw_data_base_model <- kmeans(model_ready_df, centers = 2)
+```
+
+# Inspect it
+```{r tidy=T}
 seg.summ(model_ready_df, loblaw_raw_data_base_model$cluster)
 seg.summ(loblaw_raw_data_descriptors, loblaw_raw_data_base_model$cluster)
 clusplot(model_ready_df, loblaw_raw_data_base_model$cluster, color = T, shade = T, labels = 2, lines = 0, main = "K-means cluser plot")
+```
+
+# Try other k-values
+```{r, echo=FALSE}
+shinyApp(
+
+  ui = fluidPage(
+    selectInput("k", "K-values:",
+                choices = c(2,3,4,5,6,7,8,9,10)),
+    plotOutput("clusterPlot")
+  ),
+
+  server = function(input, output) {
+    output$clusterPlot = renderPlot({
+      clusplot(model_ready_df, kmeans(model_ready_df, centers = input$k)$cluster, color = T, shade = T, labels = 2, lines = 0, main = "K-means cluser plot")
+    })
+  },
+
+  options = list(height = 500)
+)
+```
