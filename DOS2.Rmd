@@ -166,15 +166,18 @@ shinyApp(
   ui = fluidPage(
     selectInput("k", "K-values:",
                 choices = c(2,3,4,5,6,7,8,9,10)),
-    plotOutput("clusterPlot")
+    plotOutput("clusterPlot"),
+    tableOutput("clusterTable")
   ),
 
   server = function(input, output) {
+    output$clusterTable = renderTable({seg.summ(loblaw_raw_data_descriptors, kmeans(model_ready_df, centers = input$k)$cluster)})
+    
     output$clusterPlot = renderPlot({
       clusplot(model_ready_df, kmeans(model_ready_df, centers = input$k)$cluster, color = T, shade = T, labels = 2, lines = 0, main = "K-means cluser plot")
     })
   },
 
-  options = list(height = 500)
+  options = list(height = 800)
 )
 ```
